@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test HLS.js - Groovezilla</title>
+    <link href="./css/main.css" rel="stylesheet" />
+    <style>
+        body {
+            background: #0a0a0a;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            padding: 40px;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: #141414;
+            border: 1px solid rgba(0,228,203,0.3);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: #00E4CB;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #00E4CB;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        .audio-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .audio-item {
+            background: rgba(255,255,255,0.05);
+            padding: 15px 20px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+        .audio-item:hover {
+            background: rgba(0,228,203,0.1);
+            transform: translateX(5px);
+        }
+        .audio-info {
+            flex: 1;
+        }
+        .audio-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .audio-path {
+            font-size: 12px;
+            color: #666;
+            font-family: monospace;
+        }
+        .play-button {
+            background: #00E4CB;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .play-button:hover {
+            background: #00ffdd;
+            transform: scale(1.05);
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0,228,203,0.1);
+            border-radius: 8px;
+            border-left: 4px solid #00E4CB;
+        }
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .status-item:last-child {
+            margin-bottom: 0;
+        }
+        .status-label {
+            color: #999;
+        }
+        .status-value {
+            color: #fff;
+            font-weight: 600;
+        }
+        .success {
+            color: #43e97b;
+        }
+        .error {
+            color: #ff4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎵 HLS.js Test - Groovezilla Audio Player</h1>
+        
+        <div class="test-section">
+            <h2>📊 HLS.js Status</h2>
+            <div class="status">
+                <div class="status-item">
+                    <span class="status-label">HLS.js Loaded:</span>
+                    <span class="status-value" id="hls-loaded">Checking...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Browser Support:</span>
+                    <span class="status-value" id="hls-support">Checking...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Native HLS (Safari):</span>
+                    <span class="status-value" id="native-support">Checking...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Total Audio Files:</span>
+                    <span class="status-value" id="total-files">19 files</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎶 Available Audio Files (MP3)</h2>
+            <p style="color: #999; margin-bottom: 20px;">Click play to test each audio file:</p>
+            <div class="audio-list" id="audio-list">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>ℹ️ Information</h2>
+            <p style="color: #ccc; line-height: 1.8;">
+                <strong style="color: #00E4CB;">HLS.js</strong> is now integrated into Groovezilla! 
+                While your current audio files are MP3 format (which work perfectly), 
+                the player is now ready for HLS streaming (.m3u8) if you decide to use it in the future.
+            </p>
+            <p style="color: #999; margin-top: 15px; font-size: 14px;">
+                <strong>Current Setup:</strong> MP3 files in /audio folder (4.mp3 - 22.mp3)<br>
+                <strong>Future Ready:</strong> Can handle HLS streams for adaptive bitrate streaming
+            </p>
+        </div>
+    </div>
+
+    <!-- HLS.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    
+    <script>
+        // Check HLS.js status
+        document.addEventListener('DOMContentLoaded', () => {
+            const hlsLoaded = document.getElementById('hls-loaded');
+            const hlsSupport = document.getElementById('hls-support');
+            const nativeSupport = document.getElementById('native-support');
+            const audioList = document.getElementById('audio-list');
+
+            // Check if HLS.js is loaded
+            if (typeof Hls !== 'undefined') {
+                hlsLoaded.textContent = '✅ Yes';
+                hlsLoaded.classList.add('success');
+            } else {
+                hlsLoaded.textContent = '❌ No';
+                hlsLoaded.classList.add('error');
+            }
+
+            // Check HLS.js support
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                hlsSupport.textContent = '✅ Supported';
+                hlsSupport.classList.add('success');
+            } else {
+                hlsSupport.textContent = '❌ Not Supported';
+                hlsSupport.classList.add('error');
+            }
+
+            // Check native HLS support
+            const audio = document.createElement('audio');
+            if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+                nativeSupport.textContent = '✅ Yes (Safari/iOS)';
+                nativeSupport.classList.add('success');
+            } else {
+                nativeSupport.textContent = '❌ No';
+            }
+
+            // Generate audio file list
+            const audioFiles = [
+                { id: 4, title: "Midnight Dreams", artist: "Luna Eclipse" },
+                { id: 5, title: "Summer Breeze", artist: "The Sunshine Band" },
+                { id: 6, title: "Electric Pulse", artist: "DJ Nova" },
+                { id: 7, title: "Acoustic Dreams", artist: "James Rivers" },
+                { id: 8, title: "Urban Flow", artist: "MC Flow" },
+                { id: 9, title: "Jazz Nights", artist: "Miles Davis Jr" },
+                { id: 10, title: "Rock Anthem", artist: "Thunder Strike" },
+                { id: 11, title: "Chill Vibes", artist: "Relaxo" },
+                { id: 12, title: "Dance Floor", artist: "Beat Master" },
+                { id: 13, title: "Country Road", artist: "Nashville Stars" },
+                { id: 14, title: "Classical Symphony", artist: "Orchestra Vienna" },
+                { id: 15, title: "Reggae Sunshine", artist: "Island Vibes" },
+                { id: 16, title: "Blues Soul", artist: "B.B. King Jr" },
+                { id: 17, title: "Metal Storm", artist: "Iron Thunder" },
+                { id: 18, title: "Folk Tales", artist: "Mountain Echo" },
+                { id: 19, title: "Electronic Dreams", artist: "Synth Wave" },
+                { id: 20, title: "Pop Star", artist: "Melody Queen" },
+                { id: 21, title: "Indie Spirit", artist: "Indie Collective" },
+                { id: 22, title: "World Music", artist: "Global Sounds" }
+            ];
+
+            let currentAudio = null;
+
+            audioFiles.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'audio-item';
+                item.innerHTML = `
+                    <div class="audio-info">
+                        <div class="audio-title">${file.title} - ${file.artist}</div>
+                        <div class="audio-path">audio/${file.id}.mp3</div>
+                    </div>
+                    <button class="play-button" onclick="testPlay('audio/${file.id}.mp3', this)">
+                        ▶ Play
+                    </button>
+                `;
+                audioList.appendChild(item);
+            });
+        });
+
+        function testPlay(src, button) {
+            // Stop current audio if playing
+            if (window.currentAudio) {
+                window.currentAudio.pause();
+                document.querySelectorAll('.play-button').forEach(btn => {
+                    btn.textContent = '▶ Play';
+                });
+            }
+
+            // Create new audio
+            const audio = new Audio(src);
+            window.currentAudio = audio;
+
+            audio.play().then(() => {
+                button.textContent = '⏸ Playing...';
+                console.log('Playing:', src);
+            }).catch(error => {
+                console.error('Error playing audio:', error);
+                alert('Error playing audio: ' + error.message);
+            });
+
+            audio.addEventListener('ended', () => {
+                button.textContent = '▶ Play';
+            });
+
+            audio.addEventListener('pause', () => {
+                button.textContent = '▶ Play';
+            });
+        }
+    </script>
+
+    <!-- Audio Player Script (with HLS support) -->
+    <script src="js/audio-player.js"></script>
+</body>
+</html>

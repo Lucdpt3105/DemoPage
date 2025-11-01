@@ -1,7 +1,8 @@
-// Groovezilla Audio Player - Enhanced Version with Authentication
+// Groovezilla Audio Player - Enhanced Version with HLS Support
 class GroovezillaAudioPlayer {
     constructor() {
         this.audio = new Audio();
+        this.hls = null; // HLS.js instance for streaming
         this.currentTrack = null;
         this.playlist = [];
         this.currentIndex = 0;
@@ -16,6 +17,9 @@ class GroovezillaAudioPlayer {
         this.currentUser = JSON.parse(localStorage.getItem('groovezilla_current_user') || 'null');
         this.playStartTime = null;
         this.totalListenTime = 0;
+        
+        // Check HLS.js support
+        this.hlsSupported = typeof Hls !== 'undefined' && Hls.isSupported();
         
         this.initializeAudioEvents();
         this.initializeSampleData();
@@ -143,6 +147,10 @@ class GroovezillaAudioPlayer {
         const likeBtn = document.getElementById('mini-like');
         const expandBtn = document.getElementById('mini-expand');
         const progressBar = document.querySelector('.mini-progress-bar');
+        const rewindBtn = document.getElementById('mini-rewind');
+        const forwardBtn = document.getElementById('mini-forward');
+        const shuffleBtn = document.getElementById('mini-shuffle');
+        const repeatBtn = document.getElementById('mini-repeat');
 
         if (playPauseBtn) {
             playPauseBtn.addEventListener('click', () => this.togglePlayPause());
@@ -164,14 +172,55 @@ class GroovezillaAudioPlayer {
             expandBtn.addEventListener('click', () => this.expandPlayer());
         }
         
-        // Progress bar click
+        // Seek backward 10 seconds
+        if (rewindBtn) {
+            rewindBtn.addEventListener('click', () => this.seekBackward());
+        }
+        
+        // Seek forward 10 seconds
+        if (forwardBtn) {
+            forwardBtn.addEventListener('click', () => this.seekForward());
+        }
+        
+        // Toggle shuffle
+        if (shuffleBtn) {
+            shuffleBtn.addEventListener('click', () => this.toggleShuffle());
+        }
+        
+        // Toggle repeat
+        if (repeatBtn) {
+            repeatBtn.addEventListener('click', () => this.toggleRepeat());
+        }
+        
+        // Progress bar click to seek
         if (progressBar) {
             progressBar.addEventListener('click', (e) => {
-            const rect = e.target.getBoundingClientRect();
-            const percentage = (e.clientX - rect.left) / rect.width;
-            this.audio.currentTime = percentage * this.audio.duration;
+                const rect = progressBar.getBoundingClientRect();
+                const percentage = (e.clientX - rect.left) / rect.width;
+                if (this.audio.duration) {
+                    this.audio.currentTime = percentage * this.audio.duration;
+                }
             });
         }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Space bar to play/pause
+            if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+                this.togglePlayPause();
+            }
+            // Arrow left to rewind
+            else if (e.code === 'ArrowLeft' && e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+                this.seekBackward();
+            }
+            // Arrow right to forward
+            else if (e.code === 'ArrowRight' && e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+                this.seekForward();
+            }
+        });
     }
 
     initializeEventListeners() {
@@ -346,7 +395,8 @@ class GroovezillaAudioPlayer {
         this.playlist = playlist || [track];
         this.currentIndex = this.playlist.findIndex(t => t.id === trackId);
 
-        this.audio.src = track.file;
+        // Load audio with HLS support
+        this.loadAudioSource(track.file);
         this.audio.volume = this.volume;
         
         this.audio.play().then(() => {
@@ -357,6 +407,59 @@ class GroovezillaAudioPlayer {
             console.error('Error playing audio:', e);
             this.showNotification('Error playing track');
         });
+    }
+
+    // Load audio source with automatic format detection
+    loadAudioSource(source) {
+        const isHLS = source.endsWith('.m3u8');
+        
+        // Destroy previous HLS instance if exists
+        if (this.hls) {
+            this.hls.destroy();
+            this.hls = null;
+        }
+
+        if (isHLS && this.hlsSupported) {
+            // Use HLS.js for .m3u8 files
+            this.hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 90
+            });
+            
+            this.hls.loadSource(source);
+            this.hls.attachMedia(this.audio);
+            
+            this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                console.log('HLS manifest loaded, found ' + this.hls.levels.length + ' quality levels');
+            });
+            
+            this.hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    switch(data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            console.error('Fatal network error encountered, trying to recover');
+                            this.hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            console.error('Fatal media error encountered, trying to recover');
+                            this.hls.recoverMediaError();
+                            break;
+                        default:
+                            console.error('Fatal error, cannot recover');
+                            this.hls.destroy();
+                            break;
+                    }
+                }
+            });
+        } else if (isHLS && this.audio.canPlayType('application/vnd.apple.mpegurl')) {
+            // Native HLS support (Safari)
+            this.audio.src = source;
+        } else {
+            // Standard audio formats (MP3, WAV, etc.)
+            this.audio.src = source;
+        }
     }
 
     togglePlayPause() {
@@ -401,6 +504,43 @@ class GroovezillaAudioPlayer {
         if (prevTrack) {
             this.playTrack(prevTrack.id, this.playlist);
         }
+    }
+
+    seekBackward(seconds = 10) {
+        if (this.audio.currentTime > seconds) {
+            this.audio.currentTime -= seconds;
+        } else {
+            this.audio.currentTime = 0;
+        }
+        this.showNotification(`⏪ Rewound ${seconds}s`);
+    }
+
+    seekForward(seconds = 10) {
+        if (this.audio.currentTime + seconds < this.audio.duration) {
+            this.audio.currentTime += seconds;
+        } else {
+            this.audio.currentTime = this.audio.duration;
+        }
+        this.showNotification(`⏩ Forwarded ${seconds}s`);
+    }
+
+    toggleShuffle() {
+        this.isShuffled = !this.isShuffled;
+        const shuffleBtn = document.getElementById('mini-shuffle');
+        if (shuffleBtn) {
+            shuffleBtn.classList.toggle('active', this.isShuffled);
+        }
+        this.showNotification(this.isShuffled ? '🔀 Shuffle ON' : '➡️ Shuffle OFF');
+    }
+
+    toggleRepeat() {
+        this.isRepeating = !this.isRepeating;
+        this.audio.loop = this.isRepeating;
+        const repeatBtn = document.getElementById('mini-repeat');
+        if (repeatBtn) {
+            repeatBtn.classList.toggle('active', this.isRepeating);
+        }
+        this.showNotification(this.isRepeating ? '🔁 Repeat ON' : '➡️ Repeat OFF');
     }
 
     // Enhanced Search with Vietnamese support
